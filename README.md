@@ -29,7 +29,8 @@ npm run build   # static site in dist/
 | `src/aes/types.ts` | Shared types (`Word`, `Block`, `Mode`) | Team – change only after agreeing |
 | `src/aes/hex.ts` | Hex parsing and formatting | Team |
 | `src/aes/keyExpansion.ts` | S-box, Rcon, RotWord, SubWord, `expandKey` | Part 3 |
-| `src/parts/rounds/` | Part 1 page and its AES round code | Part 1 |
+| `src/aes/cipher.ts` | Round operations, `encryptTrace` (state after every step/round), `encrypt` | Encryption |
+| `src/parts/rounds/` | Part 1 page | Part 1 |
 | `src/parts/avalanche/` | Part 2 page | Part 2 |
 | `src/parts/key-expansion/` | Part 3 page | Part 3 |
 | `src/App.tsx` | Navigation between the parts | Team |
@@ -43,8 +44,16 @@ npm run build   # static site in dist/
 - `SBOX`, `INV_SBOX` – the AES S-box and its inverse (Part 1 uses them for SubBytes / InvSubBytes).
 - `RC`, `rotWord`, `subWord`.
 
-Until the real implementation is merged these are **stubs that return zeros** with the right shapes,
-so the other parts can build their pages against them now.
+### The encryption contract
+
+`src/aes/cipher.ts` is used by Part 1 and Part 2:
+
+- `encryptTrace(plaintext, key)` → `rounds[0 … 10]`, each with `roundKey`, `input`, `steps`
+  (the state after SubBytes / ShiftRows / MixColumns / AddRoundKey) and `state` (end of round),
+  plus the final `ciphertext`.
+- `subBytes`, `shiftRows`, `mixColumns`, `addRoundKey`, `encrypt`.
+
+Part 2 compares `rounds[r].state` of two traces to count the differing bits after each round.
 
 ## Working together
 
