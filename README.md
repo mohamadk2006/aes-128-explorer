@@ -30,6 +30,7 @@ npm run build   # static site in dist/
 | `src/aes/hex.ts` | Hex parsing and formatting | Team |
 | `src/aes/keyExpansion.ts` | S-box, Rcon, RotWord, SubWord, `expandKey` | Part 3 |
 | `src/aes/cipher.ts` | Round operations, `encryptTrace` (state after every step/round), `encrypt` | Encryption |
+| `src/aes/avalanche.ts` | Bit difference, `flipBit`, `compareTraces` / `avalanche` (per-round bit mismatch) | Part 2 |
 | `src/parts/rounds/` | Part 1 page | Part 1 |
 | `src/parts/avalanche/` | Part 2 page | Part 2 |
 | `src/parts/key-expansion/` | Part 3 page | Part 3 |
@@ -54,6 +55,22 @@ npm run build   # static site in dist/
 - `subBytes`, `shiftRows`, `mixColumns`, `addRoundKey`, `encrypt`.
 
 Part 2 compares `rounds[r].state` of two traces to count the differing bits after each round.
+
+### The avalanche contract
+
+`src/aes/avalanche.ts` (Part 2) builds on `encryptTrace`; it has no AES code of its own:
+
+- `avalanche(plaintextA, keyA, plaintextB, keyB)` → encrypts both pairs and compares them.
+- `compareTraces(first, second)` → `AvalancheResult` with `inputBits` (bits that differ in the inputs)
+  and `rounds[0 … 10]`, each with `stateA`, `stateB`, `difference` (A ⊕ B), `bits` (0–128),
+  `percent` and `bytes` (indices of the differing bytes, for `StateMatrix`'s `highlight`).
+- `bitDifference`, `xorBlocks`, `differingBytes`, `popcount8`.
+- `flipBit(block, bit)` – bit 0 is the most significant bit of byte 0, bit 127 the least significant
+  bit of byte 15 (the order the bits appear in the hex string).
+
+The Part 2 page (`src/parts/avalanche/`) stores the 11 round states of a first encryption, then encrypts
+again with a new data block (same key) or a new key (same block) and shows the bit mismatch after each
+round as a chart and a table.
 
 ## Working together
 
