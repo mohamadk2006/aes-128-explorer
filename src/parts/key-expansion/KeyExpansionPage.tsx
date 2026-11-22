@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { RC, expandKey } from '../../aes/keyExpansion'
+import { RC, SBOX, expandKey } from '../../aes/keyExpansion'
 import type { KeySchedule, WordStep } from '../../aes/keyExpansion'
 import { hex2, parseBlock, toHex } from '../../aes/hex'
 import type { Word } from '../../aes/types'
+import { StateMatrix } from '../../components/StateMatrix'
 import './KeyExpansionPage.css'
 
 const EXAMPLES = [
@@ -15,16 +16,22 @@ const EXAMPLES = [
 
 const randomKey = () => toHex(Array.from(crypto.getRandomValues(new Uint8Array(16))))
 
+type View = 'words' | 'matrices'
+
 /**
  * Part 3 – Key expansion: the 44 words w0 … w43, shown in groups of 4 (round keys K0 … K10),
- * with the derivation of any selected word.
+ * with the derivation of any selected word, the S-box lookups inside SubWord and a 4×4 matrix view
+ * of the round keys.
  */
 export function KeyExpansionPage() {
   const [keyText, setKeyText] = useState(EXAMPLES[0].key)
   const [selected, setSelected] = useState(4)
+  const [view, setView] = useState<View>('words')
+
   const key = parseBlock(keyText)
   const schedule = key ? expandKey(key) : null
   const digits = keyText.replace(/\s+/g, '')
+
 
   return (
     <section className="kx">
@@ -67,15 +74,38 @@ export function KeyExpansionPage() {
         </div>
       </div>
 
-      {schedule && (
-        <div className="kx-layout">
-          <ScheduleTable schedule={schedule} selected={selected} onSelect={setSelected} />
-          <Derivation step={schedule.steps[selected]} onSelect={setSelected} />
-        </div>
+      {key && schedule && (
+        <>
+          <div className="kx-layout">
+            <div className="kx-card">
+              <div className="kx-card-head">
+                <h2>The 44 words, 4 per round key</h2>
+                <div className="kx-seg" role="group" aria-label="Show round keys as">
+                  <button type="button" aria-pressed={view === 'words'} onClick={() => setView('words')}>
+                    Words
+                  </button>
+                  <button type="button" aria-pressed={view === 'matrices'} onClick={() => setView('matrices')}>
+                    4×4 matrices
+                  </button>
+                </div>
+              </div>
+              {view === 'words' ? (
+                <ScheduleTable schedule={schedule} selected={selected} onSelect={setSelected}/>
+              ) : (
+                <MatrixView schedule={schedule} selected={selected} onSelect={setSelected}/>
+              )}
+            </div>
+            <Derivation step={schedule.steps[selected]} onSelect={setSelected} />
+          </div>
+        </>
       )}
     </section>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Words view
+// ---------------------------------------------------------------------------
 
 function ScheduleTable({
   schedule,
@@ -88,8 +118,7 @@ function ScheduleTable({
 }) {
   const deps = selected >= 4 ? [selected - 1, selected - 4] : []
   return (
-    <div className="kx-card">
-      <h2>The 44 words, 4 per round key</h2>
+    <>
       <div className="kx-table" role="grid" aria-label="Key schedule">
         {schedule.roundKeys.map((_, r) => (
           <div className="kx-rk" role="row" key={r}>
@@ -112,6 +141,7 @@ function ScheduleTable({
                   role="gridcell"
                   className={cls}
                   aria-pressed={i === selected}
+                  aria-label={`w${i} ${toHex(schedule.words[i])}`}
                   onClick={() => onSelect(i)}
                 >
                   <small>w{i}</small>
@@ -127,9 +157,59 @@ function ScheduleTable({
         (RotWord → SubWord → ⊕ Rcon). <span className="kx-swatch" /> marks the two words the selected word is built
         from.
       </p>
-    </div>
+    </>
   )
 }
+
+// ---------------------------------------------------------------------------
+// 4×4 matrix view
+// ---------------------------------------------------------------------------
+
+function MatrixView({
+  schedule,
+  selected,
+  onSelect,
+}: {
+  schedule: KeySchedule
+  selected: number
+  onSelect: (i: number) => void
+}) {
+  const selRound = Math.floor(selected / 4)
+  const col = selected % 4
+  const colBytes = [0, 1, 2, 3].map((row) => 4 * col + row)
+  return (
+    <>
+      <div className="kx-matrices">
+        {schedule.roundKeys.map((rk, r) => (
+          <button
+            key={r}
+            type="button"
+            className={`kx-matrix ${r === selRound ? 'active' : ''}`}
+            aria-pressed={r === selRound}
+            aria-label={`Round key K${r}`}
+            onClick={() => onSelect(r === selRound ? selected : 4 * r + col)}
+          >
+            <StateMatrix
+              block={rk}
+              size="sm"
+              tone="key"
+              label={`K${r}`}
+              highlight={r === selRound ? colBytes : undefined}
+            />
+          </button>
+        ))}
+      </div>
+      <p className="kx-note">
+        Each round key is used as a 4×4 matrix in AddRoundKey, exactly like the state on the Rounds page: word w4r+j is
+        column j of Kr. The outlined column is the selected word w{selected}.
+      </p>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Derivation of the selected word
+// ---------------------------------------------------------------------------
 
 function Bytes({ w }: { w: Word }) {
   return (
@@ -152,7 +232,13 @@ function Line({ op, label, w, note, result }: { op?: string; label: ReactNode; w
   )
 }
 
-function Derivation({ step, onSelect }: { step: WordStep; onSelect: (i: number) => void }) {
+function Derivation({
+  step,
+  onSelect,
+}: {
+  step: WordStep
+  onSelect: (i: number) => void
+}) {
   const i = step.index
   return (
     <div className="kx-card kx-derive" aria-live="polite">
@@ -174,7 +260,7 @@ function Derivation({ step, onSelect }: { step: WordStep; onSelect: (i: number) 
             </p>
             <Line label={`temp = w${i - 1}`} w={step.temp} note="previous word" />
             <Line label="RotWord" w={step.g.rotWord} note="rotate left by one byte" />
-            <Line label="SubWord" w={step.g.subWord} note="S-box on each byte" />
+            <Line label="SubWord" w={step.g.subWord} note="S-box on each byte (see below)" />
             <Line op="⊕" label={`Rcon[${i / 4}]`} w={step.g.rcon} note={`RC[${i / 4}] = ${hex2(RC[i / 4])}`} />
             <Line op="=" label="g(temp)" w={step.g.result} note="SubWord ⊕ Rcon" />
             <Line op="⊕" label={`w${i - 4}`} w={step.wPrev4!} note="word four positions back" />
@@ -192,6 +278,8 @@ function Derivation({ step, onSelect }: { step: WordStep; onSelect: (i: number) 
         )}
       </div>
 
+      {step.g && <SboxLookup key={i} input={step.g.rotWord} />}
+
       <div className="kx-nav">
         <button type="button" disabled={i === 0} onClick={() => onSelect(i - 1)}>
           ← w{i - 1}
@@ -208,6 +296,65 @@ function Derivation({ step, onSelect }: { step: WordStep; onSelect: (i: number) 
     temp = SubWord(RotWord(temp)) ⊕ Rcon[i/4]
   w[i] = w[i-4] ⊕ temp`}
       </pre>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// S-box lookups inside SubWord
+// ---------------------------------------------------------------------------
+
+const HEX = '0123456789abcdef'
+
+function SboxLookup({ input }: { input: Word }) {
+  const [sel, setSel] = useState(0)
+  const x = input[sel]
+  const row = x >> 4
+  const col = x & 15
+  return (
+    <div className="kx-sbox">
+      <h3>Inside SubWord: four S-box lookups</h3>
+      <div className="kx-lookups" role="group" aria-label="SubWord bytes">
+        {input.map((b, k) => (
+          <button key={k} type="button" aria-pressed={k === sel} onClick={() => setSel(k)}>
+            <code>{hex2(b)}</code> → <code>{hex2(SBOX[b])}</code>
+          </button>
+        ))}
+      </div>
+      <p className="kx-muted">
+        Byte <code>{hex2(x)}</code>: the first hex digit <b>{HEX[row]}</b> picks the row, the second digit{' '}
+        <b>{HEX[col]}</b> picks the column, and the S-box gives <code className="kx-strong">{hex2(SBOX[x])}</code>.
+      </p>
+      <div className="kx-sbox-scroll">
+        <table className="kx-sbox-table" aria-label="AES S-box">
+          <thead>
+            <tr>
+              <th />
+              {Array.from({ length: 16 }, (_, c) => (
+                <th key={c} className={c === col ? 'on' : undefined}>
+                  {HEX[c]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 16 }, (_, r) => (
+              <tr key={r}>
+                <th className={r === row ? 'on' : undefined}>{HEX[r]}</th>
+                {Array.from({ length: 16 }, (_, c) => {
+                  const v = 16 * r + c
+                  const cls = v === x ? 'hit' : r === row || c === col ? 'line' : undefined
+                  return (
+                    <td key={c} className={cls}>
+                      {hex2(SBOX[v])}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

@@ -73,3 +73,34 @@
   .kx-what { grid-column: 2 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { .kx-lines > * { animation: none; } }
+
+/* ---------- Card header and view switch ---------- */
+.kx-card-head { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.kx-card-head h2 { margin: 0; }
+.kx-seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--kx-border); border-radius: 9px; }
+.kx .kx-seg button { border: 0; min-height: 2rem; padding: 0.15rem 0.7rem; font-size: 0.85rem; border-radius: 7px; }
+.kx .kx-seg button[aria-pressed='true'] { background: var(--kx-accent); color: #fff; font-weight: 600; }
+.kx-muted { color: var(--kx-muted); }
+.kx-strong { color: var(--kx-accent); font-weight: 700; }
+
+
+/* ---------- Matrix view ---------- */
+.kx-matrices { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.6rem; }
+.kx .kx-matrix { padding: 0.5rem 0.3rem; border-radius: 10px; display: grid; justify-items: center; }
+.kx .kx-matrix.active { border-color: var(--kx-accent); box-shadow: 0 0 0 2px var(--kx-accent-soft); }
+
+/* ---------- S-box lookup ---------- */
+.kx-sbox { margin-top: 1rem; border-top: 1px solid var(--kx-border); padding-top: 0.9rem; }
+.kx-sbox h3 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+.kx-sbox p { font-size: 0.85rem; margin: 0.5rem 0; }
+.kx-lookups { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.kx .kx-lookups button { min-height: 2rem; padding: 0.15rem 0.6rem; font-size: 0.82rem; border-radius: 999px; }
+.kx .kx-lookups button[aria-pressed='true'] { background: var(--kx-accent); border-color: var(--kx-accent); color: #fff; }
+.kx-sbox-scroll { overflow-x: auto; }
+.kx-sbox-table { border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 0.66rem; margin: 0 auto; }
+.kx-sbox-table th, .kx-sbox-table td { padding: 0.12rem 0.2rem; text-align: center; }
+.kx-sbox-table td { color: var(--kx-muted); }
+.kx-sbox-table th { color: var(--kx-muted); font-weight: 600; }
+.kx-sbox-table th.on { background: var(--kx-dep-line); color: #fff; border-radius: 3px; }
+.kx-sbox-table td.line { background: var(--kx-dep); color: inherit; }
+.kx-sbox-table td.hit { background: var(--kx-accent); color: #fff; font-weight: 700; border-radius: 3px; }
