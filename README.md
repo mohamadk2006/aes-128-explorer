@@ -87,6 +87,26 @@ The Part 2 page (`src/parts/avalanche/`) stores the 11 round states of a first e
 again with a new data block (same key) or a new key (same block) and shows the bit mismatch after each
 round as a chart and a table.
 
+## Design
+
+The shared design system lives in `src/index.css` (Claymorphism: soft 3D cards, thick borders, rounded corners).
+Fonts: Baloo 2 for headings, Nunito Sans for text, JetBrains Mono for hex values.
+
+Every AES operation has one colour on every page, so students learn it once. Use the `data-op` attribute
+(e.g. `<span className="op-tag" data-op="SubBytes">`) to get the colour in `--c` / `--s`:
+
+| Operation | Colour | Variable |
+| --- | --- | --- |
+| SubBytes / InvSubBytes | violet | `--op-sub` |
+| ShiftRows / InvShiftRows | blue | `--op-shift` |
+| MixColumns / InvMixColumns | green | `--op-mix` |
+| AddRoundKey, round keys, key expansion | amber | `--op-key` |
+| Differences (avalanche) | rose | `--diff` |
+
+Cards, buttons, inputs, tabs and tables of the three parts are styled in `index.css` (`.rd`, `.av`, `.kx`);
+each part's own CSS file only keeps its layout. `StateMatrix` replays a short animation on every byte whose value
+changes. All animations are turned off when the system asks for reduced motion.
+
 ## Working together
 
 1. Never push directly to `main`. Create a branch for your part: `git switch -c <part-name>`.

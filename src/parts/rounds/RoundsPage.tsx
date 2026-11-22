@@ -61,7 +61,7 @@ export function RoundsPage() {
 
   return (
     <section className="rd">
-      <h1>Part 1 · AES rounds</h1>
+      <h1 data-eyebrow="Part 1 · Rounds">AES rounds, step by step</h1>
       <p className="rd-lead">
         Enter a 128-bit key and one 128-bit data block. Step through a single round one transformation at a time,
         or run the full {action} and see the key and the data after every round.
@@ -207,7 +207,7 @@ function Stepper({ snap, mode }: { snap: Round; mode: Mode }) {
           const idx = steps.findIndex((s) => s.step === name)
           const cls = idx < 0 ? 'skip' : idx + 1 === pos ? 'now' : idx + 1 < pos ? 'done' : ''
           return (
-            <li key={name} className={cls}>
+            <li key={name} className={cls} data-op={name}>
               {name}
               {idx < 0 && <small> (skipped)</small>}
             </li>
@@ -236,24 +236,31 @@ function Stepper({ snap, mode }: { snap: Round; mode: Mode }) {
           <>
             <p className="rd-explain">
               <b>
-                Step {pos} of {last}: {current.step}.
-              </b>{' '}
+                Step {pos} of {last}:{' '}
+              </b>
+              <span className="op-tag" data-op={current.step}>
+                {current.step}
+              </span>{' '}
               {EXPLAIN[current.step]}
             </p>
-            <div className="rd-flow" key={pos}>
+            <div className="rd-flow" key={pos} data-op={current.step}>
               <StateMatrix block={before} label="Before" />
               {current.step === 'AddRoundKey' ? (
                 <>
-                  <span className="rd-op">⊕</span>
+                  <span className="rd-op" data-op="AddRoundKey">⊕</span>
                   <StateMatrix block={snap.roundKey} label={`Round key K${keyIndex}`} tone="key" />
                 </>
               ) : (
-                <span className="rd-op">→ {current.step} →</span>
+                <span className="rd-op rd-op-name" data-op={current.step}>
+                  <span>{current.step}</span>
+                  <span className="rd-arrow" aria-hidden="true" />
+                </span>
               )}
-              {current.step === 'AddRoundKey' && <span className="rd-op">=</span>}
+              {current.step === 'AddRoundKey' && <span className="rd-op" data-op="AddRoundKey">=</span>}
               <StateMatrix
                 block={current.state}
                 label="After"
+                className={`rd-after rd-after-${current.step}`}
                 tone={pos === last ? 'result' : 'plain'}
                 highlight={current.step === 'ShiftRows' || current.step === 'InvShiftRows' ? SHIFTED : undefined}
               />
@@ -320,7 +327,13 @@ function FullRun({ trace, mode }: { trace: Trace; mode: Mode }) {
             {trace.rounds.map((r) => (
               <tr key={r.round}>
                 <th scope="row">{r.round}</th>
-                <td className="rd-ops">{r.steps.map((s) => s.step).join(' → ')}</td>
+                <td className="rd-ops">
+                  {r.steps.map((s) => (
+                    <span key={s.step} className="op-tag" data-op={s.step}>
+                      {s.step}
+                    </span>
+                  ))}
+                </td>
                 <td>
                   <StateMatrix block={r.roundKey} size="sm" tone="key" label={`K${decrypting ? 10 - r.round : r.round}`} />
                 </td>
