@@ -2,12 +2,9 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { RC, SBOX, expandKey } from '../../aes/keyExpansion'
 import type { KeySchedule, WordStep } from '../../aes/keyExpansion'
-import { flipBit } from '../../aes/avalanche'
 import { hex2, parseBlock, toHex } from '../../aes/hex'
-import type { Block, Word } from '../../aes/types'
+import type { Word } from '../../aes/types'
 import { StateMatrix } from '../../components/StateMatrix'
-import { compareSchedules } from './diffusion'
-import type { ScheduleDiff } from './diffusion'
 import './KeyExpansionPage.css'
 
 const EXAMPLES = [
@@ -21,36 +18,20 @@ const randomKey = () => toHex(Array.from(crypto.getRandomValues(new Uint8Array(1
 
 type View = 'words' | 'matrices'
 
-/** Diffusion comparison: the flipped key, its schedule and the differences. */
-interface Diffusion {
-  bit: number
-  key: Block
-  schedule: KeySchedule
-  diff: ScheduleDiff
-}
-
 /**
  * Part 3 – Key expansion: the 44 words w0 … w43, shown in groups of 4 (round keys K0 … K10),
- * with the derivation of any selected word, the S-box lookups inside SubWord, a 4×4 matrix view of
- * the round keys, and the effect of flipping one key bit.
+ * with the derivation of any selected word, the S-box lookups inside SubWord and a 4×4 matrix view
+ * of the round keys.
  */
 export function KeyExpansionPage() {
   const [keyText, setKeyText] = useState(EXAMPLES[0].key)
   const [selected, setSelected] = useState(4)
   const [view, setView] = useState<View>('words')
-  const [diffOn, setDiffOn] = useState(false)
-  const [bit, setBit] = useState(0)
 
   const key = parseBlock(keyText)
   const schedule = key ? expandKey(key) : null
   const digits = keyText.replace(/\s+/g, '')
 
-  let diffusion: Diffusion | null = null
-  if (key && schedule && diffOn) {
-    const flipped = flipBit(key, bit)
-    const other = expandKey(flipped)
-    diffusion = { bit, key: flipped, schedule: other, diff: compareSchedules(schedule, other) }
-  }
 
   return (
     <section className="kx">
@@ -95,14 +76,6 @@ export function KeyExpansionPage() {
 
       {key && schedule && (
         <>
-          <DiffusionPanel
-            keyBlock={key}
-            on={diffOn}
-            onToggle={setDiffOn}
-            bit={bit}
-            onBit={setBit}
-            diffusion={diffusion}
-          />
           <div className="kx-layout">
             <div className="kx-card">
               <div className="kx-card-head">
@@ -117,110 +90,16 @@ export function KeyExpansionPage() {
                 </div>
               </div>
               {view === 'words' ? (
-                <ScheduleTable schedule={schedule} selected={selected} onSelect={setSelected} diff={diffusion?.diff} />
+                <ScheduleTable schedule={schedule} selected={selected} onSelect={setSelected}/>
               ) : (
-                <MatrixView schedule={schedule} selected={selected} onSelect={setSelected} diff={diffusion?.diff} />
+                <MatrixView schedule={schedule} selected={selected} onSelect={setSelected}/>
               )}
             </div>
-            <Derivation step={schedule.steps[selected]} onSelect={setSelected} diffusion={diffusion} />
+            <Derivation step={schedule.steps[selected]} onSelect={setSelected} />
           </div>
         </>
       )}
     </section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Key-bit diffusion
-// ---------------------------------------------------------------------------
-
-function DiffusionPanel({
-  keyBlock,
-  on,
-  onToggle,
-  bit,
-  onBit,
-  diffusion,
-}: {
-  keyBlock: Block
-  on: boolean
-  onToggle: (on: boolean) => void
-  bit: number
-  onBit: (bit: number) => void
-  diffusion: Diffusion | null
-}) {
-  return (
-    <div className={`kx-card kx-diffusion ${on ? 'on' : ''}`}>
-      <label className="kx-switch">
-        <input type="checkbox" checked={on} onChange={(e) => onToggle(e.target.checked)} />
-        <span>
-          <b>What if one key bit changes?</b>
-          <small>
-            Flip one bit of the key and see which words of the schedule change. A good key schedule spreads every key
-            bit into many round-key bits.
-          </small>
-        </span>
-      </label>
-
-      {on && diffusion && (
-        <>
-          <p className="kx-muted kx-pick-help">
-            Click a bit to flip it (bit 0 is the leftmost bit of the key). Flipped: <b>bit {bit}</b>, in byte{' '}
-            {bit >> 3}.
-          </p>
-          <div className="kx-bitpick" role="group" aria-label="Key bit to flip">
-            {keyBlock.map((byte, b) => (
-              <div key={b} className="kx-bitbyte">
-                <code>{hex2(byte)}</code>
-                <div>
-                  {Array.from({ length: 8 }, (_, k) => {
-                    const i = 8 * b + k
-                    const value = (byte >> (7 - k)) & 1
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        className={i === bit ? 'flipped' : undefined}
-                        aria-pressed={i === bit}
-                        aria-label={`Flip bit ${i} (currently ${value})`}
-                        title={`bit ${i}`}
-                        onClick={() => onBit(i)}
-                      >
-                        {i === bit ? 1 - value : value}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="kx-chip"
-              onClick={() => onBit(crypto.getRandomValues(new Uint8Array(1))[0] & 127)}
-            >
-              Random bit
-            </button>
-          </div>
-
-          <div className="kx-spread" aria-label="Bits that differ in each round key">
-            {diffusion.diff.roundBits.map((n, r) => (
-              <div key={r} className="kx-spread-col" title={`K${r}: ${n} of 128 bits differ`}>
-                <span className="kx-spread-n">{n}</span>
-                <div className="kx-spread-bar">
-                  <span style={{ height: `${(n / 128) * 100}%` }} />
-                </div>
-                <small>K{r}</small>
-              </div>
-            ))}
-          </div>
-          <p className="kx-muted kx-note">
-            Bits of each round key that differ from the original schedule (out of 128). K0 is the key itself, so it
-            differs in exactly 1 bit; RotWord, SubWord and the XOR chain spread the change, and by K10 about half of
-            the bits are different. Changed words are marked in red below.
-          </p>
-        </>
-      )}
-    </div>
   )
 }
 
@@ -232,12 +111,10 @@ function ScheduleTable({
   schedule,
   selected,
   onSelect,
-  diff,
 }: {
   schedule: KeySchedule
   selected: number
   onSelect: (i: number) => void
-  diff?: ScheduleDiff
 }) {
   const deps = selected >= 4 ? [selected - 1, selected - 4] : []
   return (
@@ -248,17 +125,14 @@ function ScheduleTable({
             <div className="kx-rk-label" role="rowheader">
               <b>K{r}</b>
               <small>{r === 0 ? 'the key' : `round ${r}`}</small>
-              {diff && <small className="kx-delta">Δ {diff.roundBits[r]} bits</small>}
             </div>
             {[0, 1, 2, 3].map((j) => {
               const i = 4 * r + j
-              const changed = diff ? diff.wordBits[i] : 0
               const cls = [
                 'kx-word',
                 i === selected ? 'active' : '',
                 deps.includes(i) ? 'dep' : '',
                 i >= 4 && i % 4 === 0 ? 'g' : '',
-                changed ? 'changed' : '',
               ].join(' ')
               return (
                 <button
@@ -267,13 +141,10 @@ function ScheduleTable({
                   role="gridcell"
                   className={cls}
                   aria-pressed={i === selected}
-                  aria-label={`w${i} ${toHex(schedule.words[i])}${changed ? `, ${changed} bits differ` : ''}`}
+                  aria-label={`w${i} ${toHex(schedule.words[i])}`}
                   onClick={() => onSelect(i)}
                 >
-                  <small>
-                    w{i}
-                    {changed > 0 && <span className="kx-badge">Δ{changed}</span>}
-                  </small>
+                  <small>w{i}</small>
                   <code>{toHex(schedule.words[i])}</code>
                 </button>
               )
@@ -298,12 +169,10 @@ function MatrixView({
   schedule,
   selected,
   onSelect,
-  diff,
 }: {
   schedule: KeySchedule
   selected: number
   onSelect: (i: number) => void
-  diff?: ScheduleDiff
 }) {
   const selRound = Math.floor(selected / 4)
   const col = selected % 4
@@ -324,17 +193,15 @@ function MatrixView({
               block={rk}
               size="sm"
               tone="key"
-              label={diff ? `K${r} · Δ ${diff.roundBits[r]}` : `K${r}`}
-              highlight={diff ? diff.roundBytes[r] : r === selRound ? colBytes : undefined}
+              label={`K${r}`}
+              highlight={r === selRound ? colBytes : undefined}
             />
           </button>
         ))}
       </div>
       <p className="kx-note">
         Each round key is used as a 4×4 matrix in AddRoundKey, exactly like the state on the Rounds page: word w4r+j is
-        column j of Kr. {diff
-          ? 'Outlined bytes differ from the original schedule.'
-          : `The outlined column is the selected word w${selected}.`}
+        column j of Kr. The outlined column is the selected word w{selected}.
       </p>
     </>
   )
@@ -368,14 +235,11 @@ function Line({ op, label, w, note, result }: { op?: string; label: ReactNode; w
 function Derivation({
   step,
   onSelect,
-  diffusion,
 }: {
   step: WordStep
   onSelect: (i: number) => void
-  diffusion: Diffusion | null
 }) {
   const i = step.index
-  const changedBits = diffusion?.diff.wordBits[i] ?? 0
   return (
     <div className="kx-card kx-derive" aria-live="polite">
       <small className="kx-eyebrow">Selected word · round key K{step.round}</small>
@@ -413,13 +277,6 @@ function Derivation({
           </>
         )}
       </div>
-
-      {diffusion && (
-        <p className={`kx-flipnote ${changedBits ? 'changed' : ''}`}>
-          With bit {diffusion.bit} of the key flipped, w{i} becomes <code>{toHex(diffusion.schedule.words[i])}</code>
-          {changedBits ? ` — ${changedBits} of 32 bits differ.` : ' — unchanged.'}
-        </p>
-      )}
 
       {step.g && <SboxLookup key={i} input={step.g.rotWord} />}
 

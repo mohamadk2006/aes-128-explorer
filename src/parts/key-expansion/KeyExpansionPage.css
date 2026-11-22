@@ -83,32 +83,6 @@
 .kx-muted { color: var(--kx-muted); }
 .kx-strong { color: var(--kx-accent); font-weight: 700; }
 
-/* ---------- Key-bit diffusion ---------- */
-.kx-diffusion.on { border-color: var(--kx-accent); }
-.kx-switch { display: flex; gap: 0.7rem; align-items: flex-start; cursor: pointer; }
-.kx-switch input { width: 1.15rem; height: 1.15rem; margin-top: 0.2rem; accent-color: var(--kx-accent); flex: none; }
-.kx-switch span { display: grid; gap: 0.15rem; }
-.kx-switch small { color: var(--kx-muted); font-size: 0.85rem; }
-.kx-pick-help { margin: 0.9rem 0 0.5rem; font-size: 0.85rem; }
-.kx-bitpick { display: flex; flex-wrap: wrap; gap: 0.5rem 0.7rem; align-items: flex-end; }
-.kx-bitbyte { display: grid; gap: 2px; }
-.kx-bitbyte code { font-size: 0.72rem; color: var(--kx-muted); }
-.kx-bitbyte > div { display: flex; gap: 1px; }
-.kx .kx-bitbyte button { width: 1.05rem; min-height: 1.7rem; padding: 0; font-size: 0.72rem; font-family: ui-monospace, Menlo, monospace; border-radius: 4px; }
-.kx .kx-bitbyte button.flipped { background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 700; }
-.kx-spread { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; margin-top: 1rem; max-width: 40rem; }
-.kx-spread-col { display: grid; justify-items: center; gap: 2px; }
-.kx-spread-n { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; font-weight: 700; }
-.kx-spread-bar { width: 100%; max-width: 2rem; height: 5rem; display: flex; align-items: flex-end; border-radius: 5px; background: var(--kx-accent-soft); overflow: hidden; }
-.kx-spread-bar span { display: block; width: 100%; background: #dc2626; border-radius: 5px 5px 0 0; transition: height 0.4s ease; }
-.kx-spread-col small { font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem; color: var(--kx-muted); }
-.kx-delta { color: #dc2626 !important; font-weight: 600; }
-.kx .kx-word.changed { border-color: #dc2626; }
-.kx .kx-word.changed:not(.active) code { color: #dc2626; }
-.kx-badge { margin-left: 0.35rem; color: #dc2626; font-weight: 700; }
-.kx-word.active .kx-badge { color: #fff; }
-.kx-flipnote { margin: 0.6rem 0 0; font-size: 0.85rem; color: var(--kx-muted); }
-.kx-flipnote.changed code { color: #dc2626; font-weight: 700; }
 
 /* ---------- Matrix view ---------- */
 .kx-matrices { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.6rem; }
