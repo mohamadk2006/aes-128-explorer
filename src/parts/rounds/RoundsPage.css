@@ -15,6 +15,9 @@
 
 .rd-lead { margin: 0; max-width: 70ch; color: var(--rd-muted); }
 .rd-muted { color: var(--rd-muted); }
+.rd-mode { display: flex; gap: 0.5rem; }
+.rd .rd-mode button[aria-pressed='true'] { background: var(--rd-accent); border-color: var(--rd-accent); color: #fff; font-weight: 700; }
+.rd-mode-help { margin: 0; max-width: 75ch; }
 .rd-error { color: #dc2626; }
 .rd-card { border: 1px solid var(--rd-border); border-radius: 12px; padding: 1rem 1.1rem; min-width: 0; margin: 0; }
 

@@ -1,13 +1,16 @@
 /**
- * Part 1 – AES rounds (encryption).
+ * Part 1 – AES rounds (encryption and decryption).
  *  1a. One round step by step, pausing after each transformation.
- *  1b. Full encryption showing the round key and the data after every round.
+ *  1b. Full encryption or decryption showing the round key and data after every round.
  *
- * All values come from encryptTrace() in src/aes/cipher.ts.
+ * Values come from encryptTrace() and decryptTrace() in src/aes/.
  */
 import { useState } from 'react'
 import { encryptTrace } from '../../aes/cipher'
 import type { EncryptionTrace, RoundSnapshot, StepName } from '../../aes/cipher'
+import { decryptTrace } from '../../aes/decipher'
+import type { DecryptionTrace, DecryptionRoundSnapshot, InverseStepName } from '../../aes/decipher'
+import type { Mode } from '../../aes/types'
 import { parseBlock, toHex } from '../../aes/hex'
 import { StateMatrix } from '../../components/StateMatrix'
 import './RoundsPage.css'
@@ -20,11 +23,18 @@ const EXAMPLES = [
 
 const randomHex = () => toHex(Array.from(crypto.getRandomValues(new Uint8Array(16))))
 
-const EXPLAIN: Record<StepName, string> = {
+type Trace = EncryptionTrace | DecryptionTrace
+type Round = RoundSnapshot | DecryptionRoundSnapshot
+type Operation = StepName | InverseStepName
+
+const EXPLAIN: Record<Operation, string> = {
   SubBytes: 'Each byte is replaced by its S-box entry (non-linear substitution).',
   ShiftRows: 'Row 0 stays; rows 1, 2 and 3 are rotated left by 1, 2 and 3 bytes.',
   MixColumns: 'Each column is multiplied by the fixed matrix [02 03 01 01] in GF(2⁸), mixing its 4 bytes.',
   AddRoundKey: 'The state is XORed byte by byte with the round key.',
+  InvShiftRows: 'Row 0 stays; rows 1, 2 and 3 are rotated right by 1, 2 and 3 bytes, undoing ShiftRows.',
+  InvSubBytes: 'Each byte is replaced by its inverse S-box entry, undoing SubBytes.',
+  InvMixColumns: 'Each column is multiplied by the inverse matrix with first row [0e 0b 0d 09] in GF(2⁸), undoing MixColumns.',
 }
 
 /** Bytes that ShiftRows moves (rows 1–3), to highlight them. */
@@ -34,22 +44,43 @@ export function RoundsPage() {
   const [keyText, setKeyText] = useState(EXAMPLES[0].key)
   const [dataText, setDataText] = useState(EXAMPLES[0].data)
   const [view, setView] = useState<'step' | 'full'>('step')
+  const [mode, setMode] = useState<Mode>('encrypt')
+  const decrypting = mode === 'decrypt'
+  const action = decrypting ? 'decryption' : 'encryption'
 
   const key = parseBlock(keyText)
   const data = parseBlock(dataText)
-  const trace = key && data ? encryptTrace(data, key) : null
+  const trace = key && data ? (decrypting ? decryptTrace(data, key) : encryptTrace(data, key)) : null
+
+  const changeMode = (next: Mode) => {
+    if (next === mode) return
+    // Carry the current output into the other mode so switching demonstrates the inverse.
+    if (trace) setDataText(toHex(decrypting ? trace.plaintext : trace.ciphertext))
+    setMode(next)
+  }
 
   return (
     <section className="rd">
       <h1>Part 1 · AES rounds</h1>
       <p className="rd-lead">
         Enter a 128-bit key and one 128-bit data block. Step through a single round one transformation at a time,
-        or run the full encryption and see the key and the data after every round.
+        or run the full {action} and see the key and the data after every round.
+      </p>
+
+      <div className="rd-mode" role="group" aria-label="Cipher mode">
+        <button type="button" aria-pressed={!decrypting} onClick={() => changeMode('encrypt')}>Encrypt</button>
+        <button type="button" aria-pressed={decrypting} onClick={() => changeMode('decrypt')}>Decrypt</button>
+      </div>
+      <p className="rd-muted rd-mode-help">
+        {decrypting
+          ? 'Enter ciphertext and the original encryption key. Decryption uses the same round keys in reverse: K10 → K0.'
+          : 'Enter plaintext and a key. Encryption uses round keys K0 → K10.'}
+        {' '}Switching modes uses the current result as the new input.
       </p>
 
       <div className="rd-inputs">
         <HexField id="rd-key" label="Key (128 bits, 32 hex digits)" value={keyText} onChange={setKeyText} valid={!!key} />
-        <HexField id="rd-data" label="Data block (128 bits, 32 hex digits)" value={dataText} onChange={setDataText} valid={!!data} />
+        <HexField id="rd-data" label={`${decrypting ? 'Ciphertext' : 'Plaintext'} (128 bits, 32 hex digits)`} value={dataText} onChange={setDataText} valid={!!data} />
         <div className="rd-examples">
           Examples:
           {EXAMPLES.map((ex) => (
@@ -59,7 +90,7 @@ export function RoundsPage() {
               className="rd-chip"
               onClick={() => {
                 setKeyText(ex.key)
-                setDataText(ex.data)
+                setDataText(decrypting ? toHex(encryptTrace(parseBlock(ex.data)!, parseBlock(ex.key)!).ciphertext) : ex.data)
               }}
             >
               {ex.label}
@@ -73,16 +104,16 @@ export function RoundsPage() {
           One round, step by step
         </button>
         <button type="button" role="tab" aria-selected={view === 'full'} onClick={() => setView('full')}>
-          Full encryption
+          Full {action}
         </button>
       </div>
 
       {!trace ? (
         <p className="rd-card rd-muted">Enter a valid key and data block to start.</p>
       ) : view === 'step' ? (
-        <SingleRound trace={trace} />
+        <SingleRound key={mode} trace={trace} mode={mode} />
       ) : (
-        <FullEncryption trace={trace} />
+        <FullRun trace={trace} mode={mode} />
       )}
     </section>
   )
@@ -134,25 +165,25 @@ function HexField({
 // 1a. One round, step by step
 // ---------------------------------------------------------------------------
 
-function SingleRound({ trace }: { trace: EncryptionTrace }) {
+function SingleRound({ trace, mode }: { trace: Trace; mode: Mode }) {
   const [round, setRound] = useState(1)
   return (
     <div className="rd-card">
       <div className="rd-round-pick">
         <span>Round:</span>
-        {Array.from({ length: 10 }, (_, i) => i + 1).map((r) => (
+        {Array.from({ length: 11 }, (_, i) => i).map((r) => (
           <button key={r} type="button" aria-pressed={r === round} onClick={() => setRound(r)}>
             {r}
           </button>
         ))}
       </div>
       {/* key= restarts the stepper whenever the round or the inputs change */}
-      <Stepper key={`${round}:${toHex(trace.key)}:${toHex(trace.plaintext)}`} snap={trace.rounds[round]} />
+      <Stepper key={`${round}:${toHex(trace.key)}:${toHex(trace.plaintext)}:${toHex(trace.ciphertext)}`} snap={trace.rounds[round]} mode={mode} />
     </div>
   )
 }
 
-function Stepper({ snap }: { snap: RoundSnapshot }) {
+function Stepper({ snap, mode }: { snap: Round; mode: Mode }) {
   // pos 0 = start of the round; pos k = after the k-th step.
   const [pos, setPos] = useState(0)
   const steps = snap.steps
@@ -160,12 +191,19 @@ function Stepper({ snap }: { snap: RoundSnapshot }) {
   const current = pos > 0 ? steps[pos - 1] : null
   const before = pos > 1 ? steps[pos - 2].state : snap.input
   const isFinal = snap.round === 10
+  const decrypting = mode === 'decrypt'
+  const keyIndex = decrypting ? 10 - snap.round : snap.round
+  const operationOrder: Operation[] = snap.round === 0
+    ? ['AddRoundKey']
+    : decrypting
+      ? ['InvShiftRows', 'InvSubBytes', 'AddRoundKey', 'InvMixColumns']
+      : ['SubBytes', 'ShiftRows', 'MixColumns', 'AddRoundKey']
 
   return (
     <>
       <ol className="rd-steps">
         <li className={pos === 0 ? 'now' : 'done'}>Start</li>
-        {(['SubBytes', 'ShiftRows', 'MixColumns', 'AddRoundKey'] as StepName[]).map((name) => {
+        {operationOrder.map((name) => {
           const idx = steps.findIndex((s) => s.step === name)
           const cls = idx < 0 ? 'skip' : idx + 1 === pos ? 'now' : idx + 1 < pos ? 'done' : ''
           return (
@@ -182,8 +220,13 @@ function Stepper({ snap }: { snap: RoundSnapshot }) {
           <>
             <p className="rd-explain">
               State at the start of round {snap.round}
-              {snap.round === 1 ? ' (plaintext after the initial AddRoundKey with K0)' : ` (output of round ${snap.round - 1})`}.
-              {isFinal && ' Round 10 is the final round: it has no MixColumns.'} Press <b>Next</b> to apply the first step.
+              {snap.round === 0
+                ? ` (${decrypting ? 'ciphertext' : 'plaintext'} before the initial AddRoundKey with K${keyIndex})`
+                : snap.round === 1
+                  ? ` (after the initial AddRoundKey with K${decrypting ? 10 : 0})`
+                  : ` (output of round ${snap.round - 1})`}.
+              {' '}This round uses K{keyIndex}.
+              {isFinal && ` Round 10 is the final round: it has no ${decrypting ? 'InvMixColumns' : 'MixColumns'}.`} Press <b>Next</b> to apply the first step.
             </p>
             <div className="rd-flow">
               <StateMatrix block={snap.input} label={`Input to round ${snap.round}`} />
@@ -202,7 +245,7 @@ function Stepper({ snap }: { snap: RoundSnapshot }) {
               {current.step === 'AddRoundKey' ? (
                 <>
                   <span className="rd-op">⊕</span>
-                  <StateMatrix block={snap.roundKey} label={`Round key K${snap.round}`} tone="key" />
+                  <StateMatrix block={snap.roundKey} label={`Round key K${keyIndex}`} tone="key" />
                 </>
               ) : (
                 <span className="rd-op">→ {current.step} →</span>
@@ -212,13 +255,13 @@ function Stepper({ snap }: { snap: RoundSnapshot }) {
                 block={current.state}
                 label="After"
                 tone={pos === last ? 'result' : 'plain'}
-                highlight={current.step === 'ShiftRows' ? SHIFTED : undefined}
+                highlight={current.step === 'ShiftRows' || current.step === 'InvShiftRows' ? SHIFTED : undefined}
               />
             </div>
             {pos === last && (
               <p className="rd-explain">
                 Round {snap.round} is complete. Output: <code>{toHex(current.state)}</code>
-                {isFinal && ' — this is the ciphertext.'}
+                {isFinal && ` — this is the ${decrypting ? 'recovered plaintext' : 'ciphertext'}.`}
               </p>
             )}
           </>
@@ -241,24 +284,25 @@ function Stepper({ snap }: { snap: RoundSnapshot }) {
 }
 
 // ---------------------------------------------------------------------------
-// 1b. Full encryption: key and data after each round
+// 1b. Full encryption or decryption: key and data after each round
 // ---------------------------------------------------------------------------
 
-function FullEncryption({ trace }: { trace: EncryptionTrace }) {
+function FullRun({ trace, mode }: { trace: Trace; mode: Mode }) {
+  const decrypting = mode === 'decrypt'
   return (
     <div className="rd-card">
       <div className="rd-summary">
         <div>
-          <small>Plaintext</small>
-          <code>{toHex(trace.plaintext)}</code>
+          <small>{decrypting ? 'Ciphertext input' : 'Plaintext input'}</small>
+          <code>{toHex(decrypting ? trace.ciphertext : trace.plaintext)}</code>
         </div>
         <div>
           <small>Key</small>
           <code>{toHex(trace.key)}</code>
         </div>
         <div>
-          <small>Ciphertext</small>
-          <code className="rd-strong">{toHex(trace.ciphertext)}</code>
+          <small>{decrypting ? 'Recovered plaintext' : 'Ciphertext'}</small>
+          <code className="rd-strong">{toHex(decrypting ? trace.plaintext : trace.ciphertext)}</code>
         </div>
       </div>
 
@@ -266,7 +310,7 @@ function FullEncryption({ trace }: { trace: EncryptionTrace }) {
         <table className="rd-table">
           <thead>
             <tr>
-              <th>Round</th>
+              <th>Round (execution order)</th>
               <th>Operations</th>
               <th>Round key</th>
               <th>Data after the round</th>
@@ -278,7 +322,7 @@ function FullEncryption({ trace }: { trace: EncryptionTrace }) {
                 <th scope="row">{r.round}</th>
                 <td className="rd-ops">{r.steps.map((s) => s.step).join(' → ')}</td>
                 <td>
-                  <StateMatrix block={r.roundKey} size="sm" tone="key" label={`K${r.round}`} />
+                  <StateMatrix block={r.roundKey} size="sm" tone="key" label={`K${decrypting ? 10 - r.round : r.round}`} />
                 </td>
                 <td>
                   <StateMatrix

@@ -30,6 +30,7 @@ npm run build   # static site in dist/
 | `src/aes/hex.ts` | Hex parsing and formatting | Team |
 | `src/aes/keyExpansion.ts` | S-box, Rcon, RotWord, SubWord, `expandKey` | Part 3 |
 | `src/aes/cipher.ts` | Round operations, `encryptTrace` (state after every step/round), `encrypt` | Encryption |
+| `src/aes/decipher.ts` | Inverse round operations, `decryptTrace` (state after every step/round), `decrypt` | Decryption |
 | `src/aes/avalanche.ts` | Bit difference, `flipBit`, `compareTraces` / `avalanche` (per-round bit mismatch) | Part 2 |
 | `src/parts/rounds/` | Part 1 page | Part 1 |
 | `src/parts/avalanche/` | Part 2 page | Part 2 |
@@ -55,6 +56,20 @@ npm run build   # static site in dist/
 - `subBytes`, `shiftRows`, `mixColumns`, `addRoundKey`, `encrypt`.
 
 Part 2 compares `rounds[r].state` of two traces to count the differing bits after each round.
+
+### Decryption visualization
+
+On the Rounds page, choose **Decrypt** to step through the inverse operations or select **Full decryption**
+to see all round keys and states. Switching modes uses the current result as the new input. Example buttons
+load plaintext for encryption and the corresponding ciphertext for decryption.
+
+`src/aes/decipher.ts` reuses the existing key expansion, inverse S-box, field multiplication, and AddRoundKey:
+
+- `decryptTrace(ciphertext, key)` records execution rounds 0 through 10, using keys K10 through K0.
+- Each round includes `keyIndex`, `roundKey`, `input`, `steps`, and its final `state`.
+- Round 0 applies AddRoundKey(K10); rounds 1 through 9 apply InvShiftRows, InvSubBytes, AddRoundKey,
+  and InvMixColumns; round 10 omits InvMixColumns and ends with AddRoundKey(K0).
+- `decrypt(ciphertext, key)` returns only the recovered plaintext.
 
 ### The avalanche contract
 
