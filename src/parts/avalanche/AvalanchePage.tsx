@@ -30,6 +30,14 @@ const EXAMPLES: { label: string; key: string; data: string; format: Format }[] =
 
 type Change = 'data' | 'key'
 
+/**
+ * Stallings' AES example (Tables 6.5 and 6.6) flips bit 7, the last bit of the first byte:
+ * plaintext 01… → 00…, or key 0f… → 0e…. Other inputs start with the very last bit (127) flipped.
+ */
+const TEXTBOOK = EXAMPLES[1]
+const isTextbook = (t: EncryptionTrace) => toHex(t.key) === TEXTBOOK.key && toHex(t.plaintext) === TEXTBOOK.data
+const firstFlip = (t: EncryptionTrace) => (isTextbook(t) ? 7 : 127)
+
 /** Readable text of a block: the text without its padding, or null if the block is not text. */
 const blockText = (b: Block): string | null => {
   const t = bytesToText(unpad(b) ?? b)
@@ -56,6 +64,8 @@ export function AvalanchePage() {
   const [newPlain, setNewPlain] = useState('')
   // The format the stored data block was entered in; the new data block uses the same one.
   const [storedFormat, setStoredFormat] = useState<Format>('hex')
+  // Set when a clicked bit turns the new text block into bytes that are not text: edit it as hex instead.
+  const [newForcedHex, setNewForcedHex] = useState(false)
 
   const key = parseBlock(keyText)
   const data = format === 'text' ? textToBlock(plainText) : parseBlock(dataText)
@@ -64,22 +74,37 @@ export function AvalanchePage() {
 
   const store = () => {
     if (!key || !data) return
-    setStored(encryptTrace(data, key))
+    const t = encryptTrace(data, key)
+    setStored(t)
     setStoredFormat(format)
+    setNewForcedHex(false)
     // Start the second run one bit away from the first, the classic avalanche experiment.
-    setNewText(toHex(flipBit(change === 'data' ? data : key, 127)))
+    setNewText(toHex(flipBit(change === 'data' ? data : key, firstFlip(t))))
     if (format === 'text') setNewPlain(flipLastCharBit(plainText))
   }
 
   const pickChange = (c: Change) => {
     setChange(c)
-    if (stored) setNewText(toHex(flipBit(c === 'data' ? stored.plaintext : stored.key, 127)))
+    setNewForcedHex(false)
+    if (stored) setNewText(toHex(flipBit(c === 'data' ? stored.plaintext : stored.key, firstFlip(stored))))
   }
 
-  const newAsText = change === 'data' && storedFormat === 'text'
+  const newAsText = change === 'data' && storedFormat === 'text' && !newForcedHex
   const original = stored ? (change === 'data' ? stored.plaintext : stored.key) : null
   const newValue = newAsText ? textToBlock(newPlain) : parseBlock(newText)
   const storedText = stored && storedFormat === 'text' ? blockText(stored.plaintext) : null
+  /** Flips one bit of the new data block or key (clicked in the bit strip). */
+  const toggleBit = (bit: number) => {
+    if (!newValue) return
+    const next = flipBit(newValue, bit)
+    setNewText(toHex(next))
+    if (newAsText) {
+      const t = blockText(next)
+      if (t !== null && toHex(textToBlock(t) ?? []) === toHex(next)) setNewPlain(t)
+      else setNewForcedHex(true)
+    }
+  }
+
   const result: AvalancheResult | null =
     stored && newValue
       ? compareTraces(
@@ -208,7 +233,24 @@ export function AvalanchePage() {
               }
             />
           )}
-          {newValue && <BitStrip a={original} b={newValue} label={change === 'data' ? 'data block' : 'key'} />}
+          {newForcedHex && change === 'data' && (
+            <p className="av-muted av-fixed">
+              That bit makes the block stop being readable text, so it is shown as hex.{' '}
+              <button type="button" className="av-chip" onClick={() => { setNewForcedHex(false); setNewPlain(storedText ?? '') }}>
+                Back to text
+              </button>
+            </p>
+          )}
+          {isTextbook(stored) && (
+            <p className="av-muted av-fixed av-book">
+              Textbook example: the second {change === 'data' ? 'plaintext' : 'key'} is the one in Stallings Table{' '}
+              {change === 'data' ? '6.5' : '6.6'} (bit 7 flipped:{' '}
+              <code>{change === 'data' ? '01… → 00…' : '0f… → 0e…'}</code>), so the bit counts below match the book.
+            </p>
+          )}
+          {newValue && (
+            <BitStrip a={original} b={newValue} label={change === 'data' ? 'data block' : 'key'} onToggle={toggleBit} />
+          )}
         </div>
       )}
 
@@ -314,27 +356,34 @@ function TextField({
   )
 }
 
-/** The 128 bits of the new input, with the bits that differ from the original marked. */
-function BitStrip({ a, b, label }: { a: Block; b: Block; label: string }) {
+/** The 128 bits of the new input, with the bits that differ from the original marked. Click a bit to flip it. */
+function BitStrip({ a, b, label, onToggle }: { a: Block; b: Block; label: string; onToggle: (bit: number) => void }) {
   const n = bitDifference(a, b)
-  const bits = []
-  for (let i = 0; i < 128; i++) {
+  const bits = Array.from({ length: 128 }, (_, i) => {
     const mask = 0x80 >> (i & 7)
     const bit = b[i >> 3] & mask ? 1 : 0
     const diff = (a[i >> 3] ^ b[i >> 3]) & mask
-    bits.push(
-      <span key={i} className={diff ? 'av-bit-diff' : undefined} title={`bit ${i}`}>
+    return (
+      <button
+        key={i}
+        type="button"
+        className={diff ? 'av-bit-diff' : undefined}
+        title={`Bit ${i} (byte ${i >> 3}): click to flip`}
+        aria-label={`Bit ${i}, ${bit}${diff ? ', differs' : ''}. Flip it.`}
+        onClick={() => onToggle(i)}
+      >
         {bit}
-      </span>,
+      </button>
     )
-  }
+  })
   return (
     <div className="av-bits-wrap">
       <p className="av-muted">
         The new {label} differs from the stored one in <b className="av-strong">{n}</b> of 128 bits
-        {n === 0 && ' — change at least one bit to see the avalanche'}.
+        {n === 0 && ' — change at least one bit to see the avalanche'}. <b>Click any bit to flip it</b>; the results
+        below update at once.
       </p>
-      <div className="av-bits" aria-label={`${n} bits differ`}>
+      <div className="av-bits" role="group" aria-label={`The 128 bits of the new ${label}, ${n} differ`}>
         {bits}
       </div>
     </div>

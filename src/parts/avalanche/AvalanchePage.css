@@ -13,9 +13,15 @@
 /* The 128 bits of the second input */
 .av-bits-wrap p { margin: 0.9rem 0 0.5rem; }
 .av-bits { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; font: 600 0.72rem var(--mono); max-width: 46rem; }
-.av-bits span { text-align: center; padding: 0.15rem 0; border-radius: 4px; background: var(--surface-3); }
-.av-bits span:nth-child(8n + 1) { margin-left: 3px; }
-.av-bits span.av-bit-diff { background: var(--diff); color: #fff; animation: pop 0.35s var(--spring) both; }
+.av .av-bits button {
+  min-height: 1.7rem; min-width: 0; padding: 0; font: inherit; border: 0; border-radius: 4px; box-shadow: none;
+  background: var(--surface-3); color: var(--text); transition: background 0.15s, transform 0.15s;
+}
+.av .av-bits button:nth-child(8n + 1) { margin-left: 3px; }
+.av .av-bits button:hover:not(:disabled) { background: var(--diff-soft); color: var(--diff); transform: translateY(-1px); border: 0; }
+.av .av-bits button:focus-visible { outline: 2px solid var(--diff); outline-offset: 1px; }
+.av .av-bits button.av-bit-diff { background: var(--diff); color: #fff; animation: pop 0.35s var(--spring) both; }
+.av-book { border-left: 4px solid var(--op-key); padding-left: 0.7rem; }
 @media (max-width: 560px) { .av-bits { grid-template-columns: repeat(16, 1fr); } }
 
 /* Big numbers */
