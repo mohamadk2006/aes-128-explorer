@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { avalanche, bitDifference, differingBytes, flipBit, popcount8, xorBlocks } from './avalanche'
-import { encrypt } from './cipher'
+import { avalanche, bitDifference, compareTraces, differingBytes, flipBit, popcount8, xorBlocks } from './avalanche'
+import { encrypt, encryptTrace } from './cipher'
 import { parseBlock, toHex } from './hex'
 
 const block = (hex: string) => parseBlock(hex)!
@@ -90,5 +90,30 @@ describe('avalanche', () => {
     const mean = total / runs
     expect(mean).toBeGreaterThan(60)
     expect(mean).toBeLessThan(68)
+  })
+})
+
+// Stallings, Cryptography and Network Security, AES example (course slides ch05, Tables 6.5 and 6.6).
+describe('textbook avalanche example', () => {
+  const key = block('0f1571c947d9e8590cb7add6af7f6798')
+  const data = block('0123456789abcdeffedcba9876543210')
+  const first = encryptTrace(data, key)
+
+  it('encrypts to the book ciphertext', () => {
+    expect(toHex(first.ciphertext)).toBe('ff0b844a0853bf7c6934ab4364148fb9')
+  })
+
+  it('matches Table 6.5 (change in plaintext: 01… → 00…, bit 7)', () => {
+    const second = flipBit(data, 7)
+    expect(toHex(second)).toBe('0023456789abcdeffedcba9876543210')
+    const r = compareTraces(first, encryptTrace(second, key))
+    expect(r.rounds.map((x) => x.bits)).toEqual([1, 20, 58, 59, 61, 68, 64, 67, 65, 61, 58])
+  })
+
+  it('matches Table 6.6 (change in key: 0f… → 0e…, bit 7)', () => {
+    const second = flipBit(key, 7)
+    expect(toHex(second)).toBe('0e1571c947d9e8590cb7add6af7f6798')
+    const r = compareTraces(first, encryptTrace(data, second))
+    expect(r.rounds.map((x) => x.bits)).toEqual([1, 22, 58, 67, 63, 81, 70, 74, 67, 59, 53])
   })
 })
