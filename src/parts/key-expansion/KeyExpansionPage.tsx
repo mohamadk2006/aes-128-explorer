@@ -35,7 +35,7 @@ export function KeyExpansionPage() {
 
   return (
     <section className="kx">
-      <h1>Part 3 · Key expansion</h1>
+      <h1 data-eyebrow="Part 3 · Key expansion">Key expansion</h1>
       <p className="kx-lead">
         AES-128 turns one 128-bit key into 44 words of 32 bits. Every group of 4 words is one round key: K0 is the
         key itself and K1 … K10 are used by the 10 rounds. Select a word to see how it was computed.
@@ -221,9 +221,24 @@ function Bytes({ w }: { w: Word }) {
   )
 }
 
-function Line({ op, label, w, note, result }: { op?: string; label: ReactNode; w: Word; note: ReactNode; result?: boolean }) {
+function Line({
+  op,
+  label,
+  w,
+  note,
+  result,
+  tint,
+}: {
+  op?: string
+  label: ReactNode
+  w: Word
+  note: ReactNode
+  result?: boolean
+  /** AES operation whose colour this line uses (RotWord is a rotation like ShiftRows, SubWord uses the S-box). */
+  tint?: 'ShiftRows' | 'SubBytes' | 'AddRoundKey'
+}) {
   return (
-    <div className={`kx-line ${result ? 'result' : ''}`}>
+    <div className={`kx-line ${result ? 'result' : ''}`} data-op={tint}>
       <span className="kx-op">{op}</span>
       <span className="kx-label">{label}</span>
       <Bytes w={w} />
@@ -259,9 +274,9 @@ function Derivation({
               {i} is a multiple of 4, so w{i - 1} first goes through g, and the result is XORed with w{i - 4}.
             </p>
             <Line label={`temp = w${i - 1}`} w={step.temp} note="previous word" />
-            <Line label="RotWord" w={step.g.rotWord} note="rotate left by one byte" />
-            <Line label="SubWord" w={step.g.subWord} note="S-box on each byte (see below)" />
-            <Line op="⊕" label={`Rcon[${i / 4}]`} w={step.g.rcon} note={`RC[${i / 4}] = ${hex2(RC[i / 4])}`} />
+            <Line tint="ShiftRows" label="RotWord" w={step.g.rotWord} note="rotate left by one byte" />
+            <Line tint="SubBytes" label="SubWord" w={step.g.subWord} note="S-box on each byte (see below)" />
+            <Line tint="AddRoundKey" op="⊕" label={`Rcon[${i / 4}]`} w={step.g.rcon} note={`RC[${i / 4}] = ${hex2(RC[i / 4])}`} />
             <Line op="=" label="g(temp)" w={step.g.result} note="SubWord ⊕ Rcon" />
             <Line op="⊕" label={`w${i - 4}`} w={step.wPrev4!} note="word four positions back" />
             <Line op="=" label={`w${i}`} w={step.word} note="" result />
@@ -278,7 +293,7 @@ function Derivation({
         )}
       </div>
 
-      {step.g && <SboxLookup key={i} input={step.g.rotWord} />}
+      {step.g && <SboxLookup key={`sbox-${i}`} input={step.g.rotWord} />}
 
       <div className="kx-nav">
         <button type="button" disabled={i === 0} onClick={() => onSelect(i - 1)}>

@@ -71,7 +71,7 @@ export function AvalanchePage() {
 
   return (
     <section className="av">
-      <h1>Part 2 · Avalanche effect</h1>
+      <h1 data-eyebrow="Part 2 · Avalanche">The avalanche effect</h1>
       <p className="av-lead">
         A good cipher changes about half of the output bits when a single input bit changes. Encrypt once and store
         the data after every round, then encrypt again with a new data block or a new key and watch the difference

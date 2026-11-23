@@ -1,10 +1,16 @@
 /* Shared 4×4 state matrix; every class is prefixed with sm- to avoid clashes. */
-.sm { margin: 0; display: inline-grid; gap: 0.35rem; justify-items: center; }
-.sm-grid { display: grid; grid-template-columns: repeat(4, auto); gap: 3px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
-.sm-grid span { border-radius: 5px; text-align: center; background: rgba(79, 70, 229, 0.1); transition: background 0.2s, color 0.2s; }
-.sm-md .sm-grid span { min-width: 2.1rem; padding: 0.3rem 0.2rem; font-size: 0.95rem; }
-.sm-sm .sm-grid span { min-width: 1.6rem; padding: 0.12rem 0.1rem; font-size: 0.78rem; }
-.sm-key .sm-grid span { background: rgba(217, 119, 6, 0.16); }
-.sm-result .sm-grid span { background: #4f46e5; color: #fff; font-weight: 700; }
-.sm-grid span.hl { outline: 2px solid #d97706; outline-offset: -2px; font-weight: 700; }
-.sm figcaption { font-size: 0.78rem; color: color-mix(in srgb, currentColor 65%, transparent); text-align: center; }
+.sm { margin: 0; display: inline-grid; gap: 0.4rem; justify-items: center; }
+.sm-grid { display: grid; grid-template-columns: repeat(4, auto); gap: 4px; font-family: var(--mono); }
+.sm-grid span {
+  display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: var(--text);
+  background: var(--surface); border: 2px solid var(--border); box-shadow: var(--clay-sm);
+  animation: pop 0.35s var(--spring) both; animation-delay: calc(var(--n) * 18ms);
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.sm-md .sm-grid span { width: 2.7rem; height: 2.7rem; font-size: 1rem; }
+.sm-sm .sm-grid span { width: 2rem; height: 2rem; font-size: 0.78rem; border-radius: 8px; border-width: 1.5px; }
+.sm-key .sm-grid span { background: var(--op-key-soft); border-color: color-mix(in srgb, var(--op-key) 40%, transparent); color: #78350f; }
+.sm-result .sm-grid span { background: var(--primary); border-color: var(--primary-hi); color: #fff; }
+.sm-grid span.hl { background: var(--diff-soft); border-color: var(--diff); color: #9f1239; }
+.sm-result .sm-grid span.hl { background: var(--diff); border-color: #9f1239; color: #fff; }
+.sm figcaption { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); text-align: center; max-width: 12rem; overflow-wrap: anywhere; }
