@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { blocksToText, pad, parseHexBlocks, textToBlocks, unpad } from './blocks'
+import { bitDifference } from './avalanche'
+import { blocksToText, flipLastCharBit, pad, parseHexBlocks, textToBlock, textToBlocks, unpad } from './blocks'
 import { encrypt } from './cipher'
 import { decrypt } from './decipher'
 import { parseBlock, toHex } from './hex'
@@ -44,5 +45,17 @@ describe('text and blocks', () => {
     expect(parseHexBlocks('00'.repeat(17))).toBeNull()
     expect(parseHexBlocks('')).toBeNull()
     expect(parseHexBlocks('zz'.repeat(16))).toBeNull()
+  })
+
+  it('fits short text into a single block', () => {
+    expect(toHex(textToBlock('Hi')!)).toBe('48690e0e0e0e0e0e0e0e0e0e0e0e0e0e')
+    expect(textToBlock('Two One Nine Two')).toEqual(textToBlocks('Two One Nine Two')[0]) // exactly 16 bytes, no padding
+    expect(textToBlock('seventeen bytes!!')).toBeNull()
+  })
+
+  it('changes one bit of the last character', () => {
+    expect(flipLastCharBit('hello')).toBe('helln')
+    expect(flipLastCharBit('Hello, AES!')).toBe('Hello, AER!')
+    expect(bitDifference(textToBlock('hello')!, textToBlock(flipLastCharBit('hello'))!)).toBe(1)
   })
 })

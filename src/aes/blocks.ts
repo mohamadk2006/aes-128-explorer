@@ -64,3 +64,26 @@ export function parseHexBlocks(text: string): Block[] | null {
   for (let i = 0; i < digits.length; i += 2) bytes.push(parseInt(digits.slice(i, i + 2), 16))
   return splitBlocks(bytes)
 }
+
+/**
+ * Text that fits in a single block (at most 16 UTF-8 bytes) → that block.
+ * Shorter text is filled up with PKCS#7 padding; exactly 16 bytes fill the block on their own.
+ * Returns null if the text is longer than 16 bytes.
+ */
+export function textToBlock(text: string): Block | null {
+  if (textToBytes(text).length > BLOCK_SIZE) return null
+  return textToBlocks(text)[0]
+}
+
+/**
+ * Flips the lowest bit of the last letter or digit (or the last character if there is none),
+ * e.g. "Hello, AES!" → "Hello, AER!": one bit changes, and it is still readable text.
+ */
+export function flipLastCharBit(text: string): string {
+  const chars = Array.from(text)
+  if (chars.length === 0) return text
+  let i = chars.length - 1
+  while (i > 0 && !/[\p{L}\p{N}]/u.test(chars[i])) i--
+  chars[i] = String.fromCodePoint(chars[i].codePointAt(0)! ^ 1)
+  return chars.join('')
+}
