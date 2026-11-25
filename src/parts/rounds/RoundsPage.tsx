@@ -4,14 +4,14 @@
  *  1b. Full encryption or decryption showing the round key and data after every round.
  *
  * The data can be normal text or hex. Text is encoded as UTF-8, padded with PKCS#7 and cut into
- * 128-bit blocks; each block is encrypted on its own with the same key (src/aes/blocks.ts).
+ * 128-bit blocks (src/aes/blocks.ts). The blocks are chained with ECB or CBC (src/aes/modes.ts).
  * Values come from encryptTrace() and decryptTrace() in src/aes/.
  */
-import { useState } from 'react'
-import { encryptTrace } from '../../aes/cipher'
+import { useEffect, useRef, useState } from 'react'
 import type { EncryptionTrace, RoundSnapshot, StepName } from '../../aes/cipher'
-import { decryptTrace } from '../../aes/decipher'
 import type { DecryptionTrace, DecryptionRoundSnapshot, InverseStepName } from '../../aes/decipher'
+import { repeats, runBlocks } from '../../aes/modes'
+import type { BlockRun, ChainMode } from '../../aes/modes'
 import { blocksToText, bytesToText, parseHexBlocks, textToBlocks, textToBytes } from '../../aes/blocks'
 import type { Block, Mode } from '../../aes/types'
 import { hex2, parseBlock, toHex } from '../../aes/hex'
@@ -25,6 +25,23 @@ const EXAMPLES: { label: string; key: string; data: string; format: Format }[] =
   { label: 'Textbook', key: '0f1571c947d9e8590cb7add6af7f6798', data: '0123456789abcdeffedcba9876543210', format: 'hex' },
   { label: 'FIPS-197 C.1', key: '000102030405060708090a0b0c0d0e0f', data: '00112233445566778899aabbccddeeff', format: 'hex' },
   { label: 'Text message', key: '2b7e151628aed2a6abf7158809cf4f3c', data: 'Meet me after the toga party, bring the key!', format: 'text' },
+  { label: 'Repeated text', key: '2b7e151628aed2a6abf7158809cf4f3c', data: 'ATTACK AT DAWN!!ATTACK AT DAWN!!ATTACK AT DAWN!!', format: 'text' },
+  {
+    label: 'NIST SP 800-38A',
+    key: '2b7e151628aed2a6abf7158809cf4f3c',
+    data: '6bc1bee22e409f96e93d7e117393172a ae2d8a571e03ac9c9eb76fac45af8e51 30c81c46a35ce411e5fbc1191a0a52ef f69f2445df4f9b17ad2b417be66c3710',
+    format: 'hex',
+  },
+]
+
+/** The IV of the NIST SP 800-38A CBC example. */
+const DEFAULT_IV = '000102030405060708090a0b0c0d0e0f'
+
+/** Play speeds, in milliseconds per step. */
+const SPEEDS = [
+  { label: 'Slow', ms: 2200 },
+  { label: 'Normal', ms: 1300 },
+  { label: 'Fast', ms: 600 },
 ]
 
 const randomHex = () => toHex(Array.from(crypto.getRandomValues(new Uint8Array(16))))
@@ -62,6 +79,10 @@ export function RoundsPage() {
   const [start, setStart] = useState<StepPos>(DEFAULT_START)
   const [view, setView] = useState<'step' | 'full'>('step')
   const [mode, setMode] = useState<Mode>('encrypt')
+  const [chain, setChain] = useState<ChainMode>('ECB')
+  const [ivText, setIvText] = useState(DEFAULT_IV)
+  const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(SPEEDS[1].ms)
   const decrypting = mode === 'decrypt'
   const action = decrypting ? 'decryption' : 'encryption'
   // Decryption always takes hex: ciphertext bytes are not readable text.
@@ -69,9 +90,12 @@ export function RoundsPage() {
 
   const key = parseBlock(keyText)
   const blocks = textInput ? textToBlocks(plainText) : parseHexBlocks(hexText)
-  const traces = key && blocks ? blocks.map((b) => (decrypting ? decryptTrace(b, key) : encryptTrace(b, key))) : null
-  const block = traces ? Math.min(blockIdx, traces.length - 1) : 0
-  const trace = traces ? traces[block] : null
+  const iv = parseBlock(ivText)
+  const cbc = chain === 'CBC'
+  const runs = key && blocks && (!cbc || iv) ? runBlocks(blocks, key, mode, chain, iv ?? blocks[0]) : null
+  const block = runs ? Math.min(blockIdx, runs.length - 1) : 0
+  const run = runs ? runs[block] : null
+  const trace = run ? run.trace : null
 
   const selectBlock = (i: number, at: StepPos = DEFAULT_START) => {
     setBlockIdx(i)
@@ -81,28 +105,28 @@ export function RoundsPage() {
   const changeMode = (next: Mode) => {
     if (next === mode) return
     // Carry the current output into the other mode so switching demonstrates the inverse.
-    if (traces) {
-      if (decrypting) {
-        const text = blocksToText(traces.map((t) => t.plaintext))
-        if (text !== null) {
-          setFormat('text')
-          setPlainText(text)
-        } else {
-          setFormat('hex')
-          setHexText(toHex(traces.flatMap((t) => t.plaintext)))
-        }
+    if (runs) {
+      const outputs = runs.map((r) => r.output)
+      const text = decrypting ? blocksToText(outputs) : null
+      if (text !== null) {
+        setFormat('text')
+        setPlainText(text)
       } else {
-        setHexText(toHex(traces.flatMap((t) => t.ciphertext)))
+        if (decrypting) setFormat('hex')
+        setHexText(toHex(outputs.flat()))
       }
     }
+    setPlaying(false)
     setMode(next)
   }
 
   const loadExample = (ex: (typeof EXAMPLES)[number]) => {
     setKeyText(ex.key)
     selectBlock(0)
+    setPlaying(false)
     if (decrypting) {
-      setHexText(toHex(blocksOf(ex).flatMap((b) => encryptTrace(b, parseBlock(ex.key)!).ciphertext)))
+      const exIv = iv ?? parseBlock(DEFAULT_IV)!
+      setHexText(toHex(runBlocks(blocksOf(ex), parseBlock(ex.key)!, 'encrypt', chain, exIv).flatMap((r) => r.output)))
     } else if (ex.format === 'text') {
       setFormat('text')
       setPlainText(ex.data)
@@ -186,10 +210,37 @@ export function RoundsPage() {
             </button>
           ))}
         </div>
+
+        <div className="rd-field rd-chain">
+          <div className="rd-data-head">
+            <span className="rd-label">Mode of operation</span>
+            <div className="rd-mode rd-format" role="group" aria-label="Mode of operation">
+              <button type="button" aria-pressed={!cbc} onClick={() => setChain('ECB')}>ECB</button>
+              <button type="button" aria-pressed={cbc} onClick={() => setChain('CBC')}>CBC</button>
+            </div>
+          </div>
+          <small className="rd-muted">
+            {cbc ? (
+              <>
+                <b>CBC</b>: each plaintext block is XORed with the previous ciphertext block (the IV for block 1)
+                before AES. C<sub>i</sub> = E(K, P<sub>i</sub> ⊕ C<sub>i−1</sub>), C<sub>0</sub> = IV. Decrypting
+                uses the same key and the same IV.
+              </>
+            ) : (
+              <>
+                <b>ECB</b>: every block is encrypted on its own with the same key, C<sub>i</sub> = E(K, P<sub>i</sub>).
+                Try “Repeated text” to see its weakness, then switch to CBC.
+              </>
+            )}
+          </small>
+          {cbc && (
+            <HexField id="rd-iv" label="IV, initialization vector (128 bits, 32 hex digits)" value={ivText} onChange={setIvText} valid={!!iv} />
+          )}
+        </div>
       </div>
 
-      {traces && (traces.length > 1 || textInput) && (
-        <BlockList traces={traces} mode={mode} selected={block} onSelect={(i) => selectBlock(i)} padded={textInput} />
+      {runs && (runs.length > 1 || textInput || cbc) && (
+        <BlockList runs={runs} mode={mode} chain={chain} selected={block} onSelect={(i) => selectBlock(i)} padded={textInput} />
       )}
 
       <div className="rd-tabs" role="tablist" aria-label="View">
@@ -201,8 +252,10 @@ export function RoundsPage() {
         </button>
       </div>
 
-      {!trace || !traces ? (
-        <p className="rd-card rd-muted">Enter a valid key and data to start.</p>
+      {run && cbc && <CbcNote run={run} block={block} mode={mode} />}
+
+      {!trace || !runs ? (
+        <p className="rd-card rd-muted">Enter a valid key, data{cbc ? ' and IV' : ''} to start.</p>
       ) : view === 'step' ? (
         <SingleRound
           key={`${mode}:${block}:${toHex(trace.key)}:${toHex(trace.plaintext)}:${toHex(trace.ciphertext)}`}
@@ -210,11 +263,16 @@ export function RoundsPage() {
           mode={mode}
           start={start}
           block={block}
-          blockCount={traces.length}
+          blockCount={runs.length}
           onBlock={selectBlock}
+          finalName={decrypting ? (cbc ? 'AES output, still to be XORed with the previous ciphertext block' : 'recovered plaintext') : 'ciphertext'}
+          playing={playing}
+          setPlaying={setPlaying}
+          speed={speed}
+          setSpeed={setSpeed}
         />
       ) : (
-        <FullRun trace={trace} mode={mode} block={block} blockCount={traces.length} />
+        <FullRun trace={trace} mode={mode} block={block} blockCount={runs.length} />
       )}
     </section>
   )
@@ -275,29 +333,39 @@ function HexField({
 // ---------------------------------------------------------------------------
 
 function BlockList({
-  traces,
+  runs,
   mode,
+  chain,
   selected,
   onSelect,
   padded,
 }: {
-  traces: Trace[]
+  runs: BlockRun[]
   mode: Mode
+  chain: ChainMode
   selected: number
   onSelect: (i: number) => void
   padded: boolean
 }) {
   const decrypting = mode === 'decrypt'
-  const inputs = traces.map((t) => (decrypting ? t.ciphertext : t.plaintext))
-  const outputs = traces.map((t) => (decrypting ? t.plaintext : t.ciphertext))
+  const cbc = chain === 'CBC'
+  const inputs = runs.map((r) => r.input)
+  const outputs = runs.map((r) => r.output)
   const padLen = padded ? inputs[inputs.length - 1][15] : 0
-  const total = traces.length * 16
+  const total = runs.length * 16
   const recovered = decrypting ? blocksToText(outputs) : null
+  const inRep = repeats(inputs)
+  const outRep = repeats(outputs)
+  const plainRep = decrypting ? outRep : inRep
+  const cipherRep = decrypting ? inRep : outRep
+  const plainRepeats = plainRep.some((r) => r >= 0)
+  const cipherRepeats = cipherRep.some((r) => r >= 0)
+  const prevName = (i: number) => (i === 0 ? 'IV' : `C${i}`)
 
   return (
     <div className="rd-card rd-blocks">
       <h2 className="rd-blocks-title">
-        {traces.length} block{traces.length === 1 ? '' : 's'} of 128 bits
+        {runs.length} block{runs.length === 1 ? '' : 's'} of 128 bits · {chain}
       </h2>
       <p className="rd-muted rd-blocks-help">
         {padded && (
@@ -306,25 +374,54 @@ function BlockList({
             16 bytes. Here {padLen} byte{padLen === 1 ? '' : 's'} of <code>{hex2(padLen)}</code> are added.{' '}
           </>
         )}
-        Each block is {decrypting ? 'decrypted' : 'encrypted'} on its own with the same key (ECB mode). Pick a block to
-        follow it through the rounds.
+        {cbc
+          ? `In CBC each block is chained to the previous ciphertext block (block 1 to the IV), so the blocks depend on each other.`
+          : `In ECB each block is ${decrypting ? 'decrypted' : 'encrypted'} on its own with the same key.`}{' '}
+        Pick a block to follow it through the rounds.
       </p>
+      {(plainRepeats || cipherRepeats) && (
+        <p className={`rd-lesson ${cipherRepeats ? 'rd-lesson-bad' : 'rd-lesson-good'}`} role="status">
+          {cipherRepeats && plainRepeats
+            ? '⚠ The plaintext repeats, and ECB gives the repeated blocks the same ciphertext too. Someone who sees only the ciphertext can tell which blocks are equal. Switch to CBC to hide it.'
+            : cipherRepeats
+              ? '⚠ Some ciphertext blocks are equal, so their plaintext blocks are equal too.'
+              : '✓ The plaintext repeats, but CBC chains every block to the previous ciphertext, so all the ciphertext blocks are different.'}
+        </p>
+      )}
       <ol className="rd-block-list">
-        {inputs.map((input, i) => (
+        {runs.map((r, i) => (
           <li key={i}>
             <button type="button" aria-pressed={i === selected} onClick={() => onSelect(i)}>
-              <span className="rd-block-num">Block {i + 1}</span>
+              <span className="rd-block-num">
+                Block {i + 1}
+                {inRep[i] >= 0 && <span className="rd-rep" data-g={inRep[i] % 4}>input = block {inRep[i] + 1}</span>}
+              </span>
               <span className="rd-block-io">
-                <span className="rd-bytes" aria-label={`Input ${toHex(input)}`}>
-                  {input.map((b, k) => (
+                <span className="rd-bytes" aria-label={`Input ${toHex(r.input)}`} data-g={inRep[i] >= 0 ? inRep[i] % 4 : inRep.includes(i) ? i % 4 : undefined}>
+                  {r.input.map((b, k) => (
                     <span key={k} className={i * 16 + k >= total - padLen ? 'rd-pad' : undefined}>
                       {hex2(b)}
                     </span>
                   ))}
                 </span>
-                {padded && <span className="rd-block-text">“{previewText(input, Math.min(16, Math.max(0, (i + 1) * 16 - (total - padLen))))}”</span>}
-                <span className="rd-block-arrow" aria-hidden="true">↓ {decrypting ? 'decrypt' : 'encrypt'}</span>
-                <code className="rd-block-out">{toHex(outputs[i])}</code>
+                {padded && <span className="rd-block-text">“{previewText(r.input, Math.min(16, Math.max(0, (i + 1) * 16 - (total - padLen))))}”</span>}
+                {r.chain && !decrypting && (
+                  <span className="rd-block-xor">
+                    ⊕ {prevName(i)} <code>{toHex(r.chain)}</code>
+                    <br />= AES input <code>{toHex(r.aesIn)}</code>
+                  </span>
+                )}
+                <span className="rd-block-arrow" aria-hidden="true">↓ AES {decrypting ? 'decrypt' : 'encrypt'}</span>
+                {r.chain && decrypting && (
+                  <span className="rd-block-xor">
+                    AES output <code>{toHex(r.aesOut)}</code>
+                    <br />⊕ {prevName(i)} <code>{toHex(r.chain)}</code> =
+                  </span>
+                )}
+                <code className="rd-block-out" data-g={outRep[i] >= 0 ? outRep[i] % 4 : outRep.includes(i) ? i % 4 : undefined}>
+                  {toHex(r.output)}
+                </code>
+                {outRep[i] >= 0 && <span className="rd-rep" data-g={outRep[i] % 4}>output = block {outRep[i] + 1}</span>}
               </span>
             </button>
           </li>
@@ -341,12 +438,33 @@ function BlockList({
             {recovered !== null ? (
               <span className="rd-strong">“{recovered}”</span>
             ) : (
-              <span className="rd-muted">Not padded UTF-8 text (it was probably hex data, or the key is wrong).</span>
+              <span className="rd-muted">Not padded UTF-8 text (it was hex data, or the key, IV or mode is wrong).</span>
             )}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+/** What CBC adds around AES for the selected block. */
+function CbcNote({ run, block, mode }: { run: BlockRun; block: number; mode: Mode }) {
+  const prev = block === 0 ? 'IV' : `C${block}`
+  return (
+    <p className="rd-cbc-note">
+      <b>CBC, block {block + 1}:</b>{' '}
+      {mode === 'encrypt' ? (
+        <>
+          AES encrypts P{block + 1} ⊕ {prev} = <code>{toHex(run.aesIn)}</code>, not the plaintext block itself. The
+          rounds below start from that block.
+        </>
+      ) : (
+        <>
+          AES decrypts C{block + 1} to <code>{toHex(run.aesOut)}</code>; XORing it with {prev} gives P{block + 1} ={' '}
+          <code>{toHex(run.output)}</code>.
+        </>
+      )}
+    </p>
   )
 }
 
@@ -367,6 +485,11 @@ function SingleRound({
   block,
   blockCount,
   onBlock,
+  finalName,
+  playing,
+  setPlaying,
+  speed,
+  setSpeed,
 }: {
   trace: Trace
   mode: Mode
@@ -374,6 +497,12 @@ function SingleRound({
   block: number
   blockCount: number
   onBlock: (i: number, at: StepPos) => void
+  /** What the state after round 10 is, e.g. "ciphertext". */
+  finalName: string
+  playing: boolean
+  setPlaying: (p: boolean) => void
+  speed: number
+  setSpeed: (ms: number) => void
 }) {
   const [{ round, pos }, setAt] = useState<StepPos>(start)
   const snap = trace.rounds[round]
@@ -397,6 +526,22 @@ function SingleRound({
           ? () => onBlock(block - 1, { round: 10, pos: trace.rounds[10].steps.length })
           : null
 
+  // Play: press Next automatically, one step every `speed` ms, until the last block is done.
+  const nextRef = useRef(next)
+  useEffect(() => {
+    nextRef.current = next
+  })
+  const hasNext = !!next
+  useEffect(() => {
+    if (!playing) return
+    if (!hasNext) {
+      setPlaying(false)
+      return
+    }
+    const id = window.setTimeout(() => nextRef.current?.go(), speed)
+    return () => window.clearTimeout(id)
+  }, [playing, speed, hasNext, round, pos, setPlaying])
+
   return (
     <div className="rd-card">
       <div className="rd-round-pick">
@@ -407,8 +552,27 @@ function SingleRound({
           </button>
         ))}
       </div>
-      <Stepper key={round} snap={snap} mode={mode} pos={pos} />
+      <Stepper key={round} snap={snap} mode={mode} pos={pos} finalName={finalName} />
       <div className="rd-nav">
+        <button
+          type="button"
+          className={`rd-play${playing ? ' on' : ''}`}
+          onClick={() => setPlaying(!playing)}
+          disabled={!playing && !next}
+          aria-pressed={playing}
+        >
+          {playing ? '❚❚ Pause' : '▶ Play'}
+        </button>
+        <label className="rd-speed">
+          <span>Speed</span>
+          <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+            {SPEEDS.map((sp) => (
+              <option key={sp.ms} value={sp.ms}>
+                {sp.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" onClick={() => setAt({ round, pos: 0 })} disabled={pos === 0}>
           Restart round
         </button>
@@ -423,7 +587,7 @@ function SingleRound({
   )
 }
 
-function Stepper({ snap, mode, pos }: { snap: Round; mode: Mode; pos: number }) {
+function Stepper({ snap, mode, pos, finalName }: { snap: Round; mode: Mode; pos: number; finalName: string }) {
   // pos 0 = start of the round; pos k = after the k-th step.
   const steps = snap.steps
   const last = steps.length
@@ -507,7 +671,7 @@ function Stepper({ snap, mode, pos }: { snap: Round; mode: Mode; pos: number }) 
             {pos === last && (
               <p className="rd-explain">
                 Round {snap.round} is complete. Output: <code>{toHex(current.state)}</code>
-                {isFinal && ` — this is the ${decrypting ? 'recovered plaintext' : 'ciphertext'}.`}
+                {isFinal && ` — this is the ${finalName}.`}
               </p>
             )}
           </>

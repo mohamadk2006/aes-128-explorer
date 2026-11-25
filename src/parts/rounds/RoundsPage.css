@@ -83,3 +83,28 @@
 .rd-block-arrow { font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .rd-block-out { font-size: 0.8rem; overflow-wrap: anywhere; color: var(--primary); font-weight: 700; }
 .rd-blocks-out { margin: 0; }
+
+/* Mode of operation (ECB / CBC) */
+.rd-chain { padding-top: 0.9rem; border-top: 2px dashed var(--surface-3); }
+.rd-label { font-weight: 700; font-size: 0.92rem; }
+.rd-chain sub { font-size: 0.7em; }
+.rd-block-xor { font-size: 0.78rem; color: var(--op-key); font-weight: 700; overflow-wrap: anywhere; }
+.rd-block-xor code { font-size: 0.78rem; color: var(--text); }
+.rd-cbc-note { margin: 0; padding: 0.7rem 1rem; border-radius: 14px; border-left: 5px solid var(--op-key); background: var(--op-key-soft); max-width: 80ch; animation: fade 0.3s ease both; }
+.rd-cbc-note code { overflow-wrap: anywhere; font-weight: 700; }
+
+/* Repeated blocks: one colour per group of equal blocks */
+.rd-lesson { margin: 0; padding: 0.7rem 1rem; border-radius: 14px; font-weight: 700; max-width: 80ch; animation: pop 0.4s var(--spring) both; }
+.rd-lesson-bad { background: var(--diff-soft); color: var(--diff); border: 2px solid var(--diff); }
+.rd-lesson-good { background: var(--op-mix-soft); color: var(--op-mix); border: 2px solid var(--op-mix); }
+[data-g='0'] { --g: var(--diff); } [data-g='1'] { --g: var(--op-sub); } [data-g='2'] { --g: var(--op-shift); } [data-g='3'] { --g: var(--op-mix); }
+.rd-bytes[data-g] { outline: 2px solid var(--g); outline-offset: 2px; border-radius: 6px; }
+.rd-block-out[data-g] { outline: 2px solid var(--g); outline-offset: 2px; border-radius: 6px; color: var(--g); }
+.rd-rep { margin-left: 0.5rem; padding: 0.05rem 0.5rem; border-radius: 999px; font: 800 0.68rem var(--sans); text-transform: uppercase; letter-spacing: 0.04em; background: var(--g); color: #fff; vertical-align: middle; }
+.rd-block-io > .rd-rep { margin-left: 0; justify-self: start; }
+
+/* Play */
+.rd .rd-play { background: var(--op-mix) !important; border-color: var(--op-mix) !important; color: #fff !important; min-width: 6.5rem; }
+.rd .rd-play.on { background: var(--op-key) !important; border-color: var(--op-key) !important; animation: pulse-ring 1.6s ease-out infinite; }
+.rd-speed { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 0.88rem; color: var(--muted); }
+.rd-speed select { font: inherit; font-weight: 700; color: var(--text); min-height: 2.75rem; padding: 0.3rem 0.6rem; border-radius: var(--radius-sm); border: 2px solid var(--border); background: var(--surface); box-shadow: var(--clay-sm); cursor: pointer; }
